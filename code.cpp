@@ -173,6 +173,10 @@ int main()
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
 
     float offsetx = 0.0f;
+    float offsety = 0.0f;
+
+    float offsetz = 0.0f;
+    float rotationY = 0.0f;
 
     while (!glfwWindowShouldClose(window))
     {
@@ -181,10 +185,31 @@ int main()
         float speed = 0.02f;
 
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-            offsetx -= speed;
+            offsetx += speed;
 
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-            offsetx += speed;
+            offsetx -= speed;
+
+
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+            offsety += speed;
+
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+            offsety -= speed;
+
+
+
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            offsetz -= speed;
+
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            offsetz += speed;
+
+        float rotSpeed = 1.0f;
+
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+            rotationY += rotSpeed;
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glUseProgram(shaderProgram);
@@ -207,7 +232,9 @@ int main()
         );
 
         // ---------- Draw Model 2 (moving) ----------
-        glm::mat4 model2 = glm::translate(glm::mat4(1.0f), glm::vec3(offsetx, 0.0f, 0.0f));
+        glm::mat4 model2 = glm::mat4(1.0f);
+        model2 = glm::translate(model2, glm::vec3(offsetx, offsety, offsetz));
+        model2 = glm::rotate(model2, glm::radians(rotationY), glm::vec3(0.0f, 1.0f, 0.0f));
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model2));
 
