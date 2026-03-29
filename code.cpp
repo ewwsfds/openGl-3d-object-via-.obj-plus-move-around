@@ -12,17 +12,23 @@
 #include <vector>
 #include <iostream>
 
-// ---------- Simple vertex ----------
 struct Vertex {
     glm::vec3 position;
 };
 
-// ---------- Globals ----------
+struct ModelRange {
+    unsigned int indexOffset;
+    unsigned int indexCount;
+};
+
 unsigned int VAO, VBO, EBO;
 unsigned int shaderProgram;
 
 std::vector<Vertex> vertices;
 std::vector<unsigned int> indices;
+
+// Store ranges for each model
+std::vector<ModelRange> modelRanges;
 
 // ---------- Shader ----------
 const char* vertexShaderSrc = R"(
@@ -74,15 +80,14 @@ unsigned int createShaderProgram()
     return program;
 }
 
-// ---------- Load OBJ with Assimp ----------
+// ---------- Load OBJ and append ----------
 void loadModel(const std::string& path)
 {
     Assimp::Importer importer;
 
     const aiScene* scene = importer.ReadFile(
         path,
-        aiProcess_Triangulate |
-        aiProcess_FlipUVs
+        aiProcess_Triangulate | aiProcess_FlipUVs
     );
 
     if (!scene || !scene->mRootNode)
@@ -92,6 +97,11 @@ void loadModel(const std::string& path)
     }
 
     aiMesh* mesh = scene->mMeshes[0];
+
+    ModelRange range;
+    range.indexOffset = indices.size();
+
+    unsigned int vertexOffset = vertices.size();
 
     // Vertices
     for (unsigned int i = 0; i < mesh->mNumVertices; i++)
@@ -105,13 +115,18 @@ void loadModel(const std::string& path)
         vertices.push_back(v);
     }
 
-    // Indices
+    // Indices (offset them!)
     for (unsigned int i = 0; i < mesh->mNumFaces; i++)
     {
         aiFace face = mesh->mFaces[i];
         for (unsigned int j = 0; j < face.mNumIndices; j++)
-            indices.push_back(face.mIndices[j]);
+        {
+            indices.push_back(face.mIndices[j] + vertexOffset);
+        }
     }
+
+    range.indexCount = indices.size() - range.indexOffset;
+    modelRanges.push_back(range);
 }
 
 // ---------- Setup buffers ----------
@@ -139,25 +154,25 @@ void setupMesh()
 int main()
 {
     glfwInit();
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Assimp Move Object", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Two Models One VAO", NULL, NULL);
     glfwMakeContextCurrent(window);
 
     gladLoadGL();
 
     shaderProgram = createShaderProgram();
 
-    loadModel("model.obj");
+    // Load TWO models into same buffers
+    loadModel("model1.obj");
+    loadModel("model2.obj");
+
     setupMesh();
 
     glEnable(GL_DEPTH_TEST);
 
-    // Camera
     glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -5));
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
 
     float offsetx = 0.0f;
-    float offsety = 0.0f;
-
 
     while (!glfwWindowShouldClose(window))
     {
@@ -171,25 +186,37 @@ int main()
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
             offsetx += speed;
 
-        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
-            offsety -= speed; // optional: move forward (or Y if you want)
-
-        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
-            offsety += speed;
-
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(offsetx, offsety, 0.0f));
-
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
         glUseProgram(shaderProgram);
 
-        // Send matrices
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+        // ---------- Draw Model 1 (static) ----------
+        glm::mat4 model1 = glm::mat4(1.0f);
+
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model1));
+
+        glDrawElements(
+            GL_TRIANGLES,
+            modelRanges[0].indexCount,
+            GL_UNSIGNED_INT,
+            (void*)(modelRanges[0].indexOffset * sizeof(unsigned int))
+        );
+
+        // ---------- Draw Model 2 (moving) ----------
+        glm::mat4 model2 = glm::translate(glm::mat4(1.0f), glm::vec3(offsetx, 0.0f, 0.0f));
+
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model2));
+
+        glDrawElements(
+            GL_TRIANGLES,
+            modelRanges[1].indexCount,
+            GL_UNSIGNED_INT,
+            (void*)(modelRanges[1].indexOffset * sizeof(unsigned int))
+        );
 
         glfwSwapBuffers(window);
     }
